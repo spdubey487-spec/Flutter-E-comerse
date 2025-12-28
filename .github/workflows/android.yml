@@ -2,33 +2,87 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      # Step 1: Checkout your code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Flutter
+      # Step 2: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: 'stable'
+          channel: 'stable'
+          cache: true
+          cache-key: flutter-stable
+          cache-path: /tmp/flutter-sdk
 
-      - name: Install dependencies
+      # Step 3: Set up Java (required for Android builds)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # Step 4: Accept Android licenses (critical for build)
+      - name: Accept Android licenses
+        run: |
+          yes | sdkmanager --licenses || true
+          flutter doctor --android-licenses --verbose
+
+      # Step 5: Get dependencies
+      - name: Install Flutter dependencies
         run: flutter pub get
 
-      - name: Ensure Flutter platforms (generate native folders)
-        run: flutter create .
+      # Step 6: Create proper Android project structure
+      - name: Initialize Android project
+        run: |
+          # Check if android folder exists, if not create it
+          if [ ! -d "android" ]; then
+            echo "Creating Android project structure..."
+            flutter create --platforms=android --org=com.quickfood --project-name=quick_food_delivery .
+          else
+            echo "Android folder exists, updating..."
+            flutter create --platforms=android --org=com.quickfood --project-name=quick_food_delivery .
+          fi
 
-      - name: Build release APK
-        run: flutter build apk --release
+      # Step 7: Configure Android app for release
+      - name: Configure Android build
+        run: |
+          # Update Android build configuration for release
+          cd android
+          ./gradlew wrapper --gradle-version=8.5
+          cd ..
 
-      - name: Upload release APK
+      # Step 8: Build the APK
+      - name: Build APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      # Step 9: Upload APK as artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: quick-food-app
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha1
+          retention-days: 7
+
+      # Step 10: Upload APK to workflow summary (optional)
+      - name: Create build summary
+        run: |
+          echo "## 🚀 Flutter APK Build Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "**APK File:** \`app-release.apk\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Time:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Flutter Version:** $(flutter --version | head -1)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the APK from the 'Artifacts' section above." >> $GITHUB_STEP_SUMMARY
