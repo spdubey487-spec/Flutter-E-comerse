@@ -1,0 +1,12 @@
+/build/
+.dart_tool/
+.packages
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-embedding-debug.log
+.idea/
+.vscode/
+android/.gradle/
+ios/Flutter/.symlinks/
+**/GeneratedPluginRegistrant.*
